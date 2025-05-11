@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Enviar Mensagem e PDF</title>
+  <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet" />
+</head>
+<body>
+  <div class="container mt-5">
+    <h2>Envie uma Mensagem para os Números</h2>
+    
+    <!-- Exibe o QR Code se ele já foi gerado -->
+    <div class="mt-4">
+      <p>Antes de enviar, escaneie o <strong>QR Code</strong> do WhatsApp:</p>
+      <div id="qrcode-container">
+        <!-- O QR Code será exibido aqui -->
+        <p>QR Code não gerado ainda. Aguarde...</p>
+      </div>
+    </div>
+
+    <!-- Formulário para enviar mensagem e anexos -->
+    <form action="/enviar" method="POST" enctype="multipart/form-data">
+      <div class="form-group">
+        <label for="mensagem">Mensagem</label>
+        <textarea class="form-control" id="mensagem" name="mensagem" rows="4" required></textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="pdf">Anexar PDF</label>
+        <input type="file" class="form-control-file" id="pdf" name="pdf" accept=".pdf" required />
+      </div>
+
+      <div class="form-group">
+        <label for="excel">Planilha com Números (.xlsx)</label>
+        <input type="file" class="form-control-file" id="excel" name="excel" accept=".xlsx" required />
+      </div>
+
+      <button type="submit" class="btn btn-primary">Enviar</button>
+    </form>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.2/dist/umd/popper.min.js"></script>
+  <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+  <script>
+    // Função para atualizar o QR Code quando ele for gerado
+    function atualizarQrCode(qrCodeBase64) {
+      if (qrCodeBase64) {
+        document.getElementById('qrcode-container').innerHTML = `
+          <h3>Escaneie o QR Code com seu WhatsApp:</h3>
+          <img src="${qrCodeBase64}" alt="QR Code do WhatsApp" class="img-fluid" />
+        `;
+      }
+    }
+
+    // Verifica se o QR Code já foi gerado ao carregar a página
+    fetch('/qrcode')
+      .then(response => response.text())
+      .then(data => {
+        if (data.includes('<img')) {
+          const qrCodeBase64 = data.match(/src="([^"]+)"/)[1];
+          atualizarQrCode(qrCodeBase64);
+        }
+      });
+  </script>
+</body>
+</html>
