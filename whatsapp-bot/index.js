@@ -6,6 +6,7 @@ const xlsx = require('xlsx');
 const path = require('path');
 const fs = require('fs');
 
+
 // Criação dos diretórios necessários
 if (!fs.existsSync('uploads')) fs.mkdirSync('uploads');
 if (!fs.existsSync('public')) fs.mkdirSync('public');
@@ -123,6 +124,10 @@ function lerNumerosDoExcel(caminho) {
 
 // Inicializa o servidor na porta 3000
 const PORT = process.env.PORT || 3000; // Usa a porta dinâmica do Heroku ou 3000 localmente
-app.listen(PORT, () => {
-  console.log(`🚀 Servidor rodando em http://localhost:${PORT}`);
+app.get('/', (req, res) => {
+  res.send('Hello, World!');
+});
+
+app.listen(port, () => {
+  console.log(`Server running on port ${port}`);
 });
