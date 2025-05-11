@@ -114,7 +114,11 @@ function lerNumerosDoExcel(caminho) {
   const workbook = xlsx.readFile(caminho);
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   const dados = xlsx.utils.sheet_to_json(sheet);
-  return dados.map(item => item.numero + '@c.us');
+  return dados.map(item => {
+    // Captura o número e converte em string com preservação dos dígitos
+    let raw = String(item.telefone || item.numero).replace(/[^0-9]/g, '');
+    return raw + '@c.us';
+  });
 }
 
 // Inicializa o servidor na porta 3000
