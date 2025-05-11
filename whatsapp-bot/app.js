@@ -6,91 +6,118 @@ const xlsx = require('xlsx');
 const path = require('path');
 const fs = require('fs');
 
-// Garante que as pastas existam
+// Criação dos diretórios necessários
 if (!fs.existsSync('uploads')) fs.mkdirSync('uploads');
 if (!fs.existsSync('public')) fs.mkdirSync('public');
 
-// Configuração do Multer para múltiplos arquivos
+// Configuração do multer para upload de arquivos
 const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, 'uploads/');
-  },
-  filename: function (req, file, cb) {
-    cb(null, Date.now() + '-' + file.originalname);
-  }
+  destination: (req, file, cb) => cb(null, 'uploads/'),
+  filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname)
 });
 
-const upload = multer({ storage: storage });
-
-// Cria o servidor
+const upload = multer({ storage });
 const app = express();
 
-// Middlewares para processar o corpo da requisição ANTES do Multer
+// Middleware para processar dados do formulário
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 app.use(express.static('public'));
 
-// Página principal
+let qrCodeBase64 = '';
+let client;
+
+// 🟢 Inicializa o Venom assim que o servidor sobe
+venom
+  .create(
+    {
+      session: 'envio-planilha',
+      headless: false, // true para produção, false para ver o navegador
+      waitForLogin: true, // Espera o login para prosseguir
+      browserArgs: ['--no-sandbox'],
+      executablePath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' // Caminho do seu Chrome
+    },
+    (base64Qrimg) => {
+      qrCodeBase64 = base64Qrimg;
+      console.log('🔗 QR Code gerado');
+    },
+    (statusSession) => {
+      console.log('📶 Status da sessão:', statusSession);
+    }
+  )
+  .then((_client) => {
+    client = _client;
+    console.log('✅ Cliente Venom criado com sucesso!');
+  })
+  .catch((err) => {
+    console.error('❌ Erro ao criar cliente Venom:', err);
+  });
+
+// Rota principal
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Envio de mensagem
+// Rota para exibir o QR Code
+app.get('/qrcode', (req, res) => {
+  if (!qrCodeBase64) return res.send('QR Code ainda não gerado.');
+  res.send(`
+    <h1>Escaneie o QR Code com seu WhatsApp</h1>
+    <img src="${qrCodeBase64}" />
+  `);
+});
+
+// Rota para envio das mensagens e anexos
 app.post('/enviar', upload.fields([
-  { name: 'pdf', maxCount: 1 },  // Espera pelo campo 'pdf' no formulário
-  { name: 'excel', maxCount: 1 } // Espera pelo campo 'excel' no formulário
+  { name: 'pdf', maxCount: 1 },
+  { name: 'excel', maxCount: 1 }
 ]), async (req, res) => {
+  if (!client) return res.status(500).send('Cliente Venom ainda não está pronto.');
+
   const mensagem = req.body.mensagem;
   const arquivoPDF = req.files['pdf'] ? req.files['pdf'][0] : null;
   const arquivoExcel = req.files['excel'] ? req.files['excel'][0] : null;
 
-  if (!arquivoExcel) {
-    return res.status(400).send('Erro: planilha com números não foi enviada.');
-  }
+  if (!arquivoExcel) return res.status(400).send('Erro: planilha com números não foi enviada.');
 
   const numeros = lerNumerosDoExcel(arquivoExcel.path);
 
-  try {
-    const client = await venom.create({
-      session: 'envio-planilha',
-      headless: true,
-      browserArgs: ['--headless=new'],
-      executablePath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
-    });
+  // Envia a mensagem para cada número na planilha
+  for (let i = 0; i < numeros.length; i++) {
+    const numero = numeros[i];
+    await new Promise(resolve => setTimeout(resolve, 3000)); // 3 segundos entre envios
 
-    for (let i = 0; i < numeros.length; i++) {
-      const numero = numeros[i];
-      await new Promise(resolve => setTimeout(resolve, i * 3000)); // 3 segundos entre envios
+    try {
+      await client.sendText(numero, mensagem);
+      console.log(`✅ Mensagem enviada para ${numero}`);
 
-      try {
-        await client.sendText(numero, mensagem);
-        console.log(`✅ Mensagem enviada para ${numero}`);
-        if (arquivoPDF) {
-          await client.sendFile(numero, arquivoPDF.path, arquivoPDF.originalname, 'Aqui está o PDF que você solicitou.');
-          console.log(`✅ PDF enviado para ${numero}`);
-        }
-      } catch (erro) {
-        console.error(`❌ Erro ao enviar para ${numero}:`, erro);
+      if (arquivoPDF) {
+        await client.sendFile(
+          numero,
+          arquivoPDF.path,
+          arquivoPDF.originalname,
+          'Aqui está o PDF que você solicitou.'
+        );
+        console.log(`✅ PDF enviado para ${numero}`);
       }
-    }
 
-    res.send('Mensagens sendo enviadas...');
-    client.close(); // Fechar a sessão do Venom ao finalizar
-  } catch (erro) {
-    console.error('Erro ao iniciar o bot:', erro);
-    res.status(500).send('Erro ao iniciar o bot');
+    } catch (erro) {
+      console.error(`❌ Erro ao enviar para ${numero}:`, erro);
+    }
   }
+
+  res.send('Mensagens sendo enviadas...');
 });
 
-// Leitura dos números da planilha
+// Função para ler os números da planilha Excel
 function lerNumerosDoExcel(caminho) {
   const workbook = xlsx.readFile(caminho);
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   const dados = xlsx.utils.sheet_to_json(sheet);
-  return dados.map(item => item.numero + '@c.us'); // Adiciona o sufixo para WhatsApp
+  return dados.map(item => item.numero + '@c.us');
 }
 
-// Inicia o servidor
+// Inicializa o servidor na porta 3000
 app.listen(3000, () => {
-  console.log('✅ Servidor rodando em http://localhost:3000');
+  console.log('🚀 Servidor rodando em http://localhost:3000');
 });
